@@ -1,0 +1,164 @@
+---
+title: "Project3-FDA 5374-Group24"
+author: "Harsh Shingala,Mayur Mahanta and Praneeth Goreela"
+date: "5/2/2022"
+output: html_document
+---
+
+```{r Importing the necessary libraries}
+library(dplyr)
+library(stringr)
+library(tidytext)
+library(janeaustenr)
+library(ggplot2)
+library(tidyr)
+library(igraph)
+library(ggraph)
+library(tm)
+```
+
+#Task2
+```{r Compute word frequencies for each year. Exclude the stop words}
+tweets_2017 <- tibble(line = 1, text = read.csv("/Users/harshshingala/Downloads/2017.csv")[,c('tweet')]) %>% mutate(year = 2017)
+tweets_2018 <- tibble(line = 1, text = read.csv("/Users/harshshingala/Downloads/2018.csv")[,c('tweet')]) %>% mutate(year = 2018)
+tweets_2019 <- tibble(line = 1, text = read.csv("/Users/harshshingala/Downloads/2019.csv")[,c('tweet')]) %>% mutate(year = 2019)
+tweets_2020 <- tibble(line = 1, text = read.csv("/Users/harshshingala/Downloads/2020.csv")[,c('tweet')]) %>% mutate(year = 2020)
+tweets_2021 <- tibble(line = 1, text = read.csv("/Users/harshshingala/Downloads/2021.csv")[,c('tweet')]) %>% mutate(year = 2021)
+tweets_2022 <- tibble(line = 1, text = read.csv("/Users/harshshingala/Downloads/2022.csv")[,c('tweet')]) %>% mutate(year = 2022)
+
+#Combining tweets from year 2017-2022
+tweets <- rbind(tweets_2017, tweets_2018, tweets_2019, tweets_2020, tweets_2021,tweets_2022)
+
+tweets_words <- tweets %>%
+  unnest_tokens(word, text) %>%
+  count(year, word, sort = TRUE) 
+
+stopwords_list <- c(stopwords(), "http" , "t.co", "amp", "re", "will", "can", "just", "am", "https", "yes", "no", "good", "bad", "it's", "Coming")
+
+#Excluding stopwords
+tweets_words<- filter(tweets_words, !(word %in%  stopwords_list)) 
+
+total_words <- tweets_words %>% 
+  group_by(year) %>% 
+  summarize(total = sum(n))
+
+tweets_words <- left_join(tweets_words, total_words) %>% mutate(Frequency = n/total) %>% arrange(desc(year))
+tweets_words
+```
+
+```{r Show top 10 words (for each year) by the highest value of word frequency}
+
+#Top 10 words for each year 
+top_10 <- tweets_words %>%                                 
+  group_by(year) %>%
+  slice(1:10)
+top_10  
+```
+
+```{r Plot histogram of word frequencies for each year}
+
+#Plotting histogram of word frequencies by year
+ggplot(tweets_words, aes(Frequency, fill = year)) +
+  geom_histogram(show.legend = FALSE) +
+  xlim(NA, 0.0009) +
+  facet_wrap(~year, ncol = 2, scales = "free_y")
+```
+
+```{r Use Zipf’s law and plot log-log plots of word frequencies and rank for each yearr}
+
+#Plotting log-log plots of word frequencies by year
+zipf <- tweets_words %>% 
+  group_by(year) %>% 
+  mutate(rank = row_number()) %>%
+  ungroup()
+
+lm(log10(Frequency) ~ log10(rank), data = zipf) 
+
+zipf %>% 
+  ggplot(aes(rank, Frequency, color = year)) + 
+  geom_abline(intercept = -0.89, slope = -0.97, 
+              color = "gray50", linetype = 2) +
+  geom_line(size = 1.1, alpha = 0.8, show.legend = FALSE) + 
+  scale_x_log10() +
+  scale_y_log10()
+```
+
+```{r Create bigram network graphs for each year}
+tweets_bigrams <- tweets %>%
+  unnest_tokens(bigram, text, token = "ngrams", n = 2)
+
+tweets_bigrams_separated <- tweets_bigrams %>%
+  separate(bigram, c("word1", "word2"), sep = " ")
+
+tweets_bigrams_filtered <- tweets_bigrams_separated %>%
+  filter(!word1 %in% stopwords_list) %>% 
+  filter(!word2 %in% stopwords_list)
+  
+tweets_bigram_counts <- tweets_bigrams_filtered %>% 
+  group_by(year) %>%
+  count(word1, word2, sort = TRUE) %>% drop_na()
+
+tweets_graph_2017 <- tweets_bigram_counts %>% subset(year == 2017,c(-1)) %>%
+  filter(n > 10) %>%
+  graph_from_data_frame()
+
+tweets_graph_2018 <- tweets_bigram_counts %>% subset(year == 2018,c(-1)) %>%
+  filter(n > 10) %>%
+  graph_from_data_frame()
+
+tweets_graph_2019 <- tweets_bigram_counts %>% subset(year == 2019,c(-1)) %>%
+  filter(n > 10) %>%
+  graph_from_data_frame()
+
+tweets_graph_2020 <- tweets_bigram_counts %>% subset(year == 2020,c(-1)) %>%
+  filter(n > 20) %>%
+  graph_from_data_frame()
+
+tweets_graph_2021 <- tweets_bigram_counts %>% subset(year == 2021,c(-1)) %>%
+  filter(n > 20) %>%
+  graph_from_data_frame()
+
+tweets_graph_2022 <- tweets_bigram_counts %>% subset(year == 2022,c(-1)) %>%
+  filter(n > 5) %>%
+  graph_from_data_frame()
+
+a <- grid::arrow(type = "closed", length = unit(.15, "inches"))
+
+#Plotting the bigrams for every year
+ggraph(tweets_graph_2017, layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n), show.legend = FALSE,
+                 arrow = a, end_cap = circle(.07, 'inches')) +
+  geom_node_point(color = "violet", size = 2) +
+  geom_node_text(aes(label = name), vjust = 1, hjust = 1)
+
+ggraph(tweets_graph_2018, layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n), show.legend = FALSE,
+                 arrow = a, end_cap = circle(.07, 'inches')) +
+  geom_node_point(color = "Magenta", size = 2) +
+  geom_node_text(aes(label = name), vjust = 1, hjust = 1)
+
+ggraph(tweets_graph_2019, layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n), show.legend = FALSE,
+                 arrow = a, end_cap = circle(.07, 'inches')) +
+  geom_node_point(color = "blue", size = 2) +
+  geom_node_text(aes(label = name), vjust = 1, hjust = 1)
+
+ggraph(tweets_graph_2020, layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n), show.legend = FALSE,
+                 arrow = a, end_cap = circle(.07, 'inches')) +
+  geom_node_point(color = "yellow", size = 2) +
+  geom_node_text(aes(label = name), vjust = 1, hjust = 1)
+
+ggraph(tweets_graph_2021, layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n), show.legend = FALSE,
+                 arrow = a, end_cap = circle(.07, 'inches')) +
+  geom_node_point(color = "orange", size = 2) +
+  geom_node_text(aes(label = name), vjust = 1, hjust = 1)
+
+ggraph(tweets_graph_2022, layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n), show.legend = FALSE,
+                 arrow = a, end_cap = circle(.07, 'inches')) +
+  geom_node_point(color = "red", size = 2) +
+  geom_node_text(aes(label = name), vjust = 1, hjust = 1)
+```
+
